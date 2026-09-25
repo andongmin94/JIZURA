@@ -34,6 +34,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand .mark { font: 900 26px/1 var(--brand); letter-spacing: 0.02em; color: var(--text); text-shadow: -2px -1px 0 rgba(22,244,212,0.85), 2px 1px 0 rgba(245,165,12,0.9); }
 .brand .word { font: 600 12px/1 var(--mono); letter-spacing: 0.34em; color: var(--text); }
 .brand .tag { font: 400 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.08em; }
+.brand .ver { font: 400 10px/1 var(--mono); color: var(--muted); opacity: 0.8; margin-left: 6px; letter-spacing: 0.04em; }
 .proj { display: flex; gap: 8px; flex: 1 1 280px; min-width: 0; }
 .proj input { flex: 1 1 0; min-width: 0; }
 .acts { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -100,6 +101,13 @@ h3 { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); margin-top: 1
 .tapbox { border: 1px solid var(--amber); border-radius: var(--r); padding: 10px; display: grid; gap: 8px; background: rgba(245,165,12,0.06); }
 .tapbox .next { font-size: 15px; }
 button.tap { font: 700 18px/1 var(--mono); letter-spacing: 0.2em; padding: 16px; background: var(--amber); color: #120c00; border-color: var(--amber); }
+/* タップ同期中は行一覧の自動スクロールで押せなくなるので、左カラムの先頭に貼り付けて固定する */
+.col-left > #tapPanel { position: sticky; top: 0; z-index: 20; margin: 10px 12px; background-color: var(--panel); background-image: linear-gradient(rgba(245,165,12,0.10), rgba(245,165,12,0.10)); box-shadow: 0 10px 24px rgba(0,0,0,0.5); }
+.tapbox.compact .hint { display: none; }
+/* 固定レイアウトにならない広さ／高さのときは、左カラムがスクロールしないのでビューポートに重ねて固定する */
+@media (max-width: 1180px), (max-height: 619px) {
+  .col-left > #tapPanel { position: fixed; top: 8px; left: 8px; right: 8px; bottom: auto; margin: 0; max-height: 62vh; overflow: auto; box-shadow: 0 14px 40px rgba(0,0,0,0.6); }
+}
 
 /* line list */
 #lineList { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -170,6 +178,14 @@ button.play { width: 40px; height: 34px; padding: 0; font-size: 14px; }
 .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; }
 .checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 0; }
 .checks input { accent-color: var(--amber); }
+
+.tgroup .checks.tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; padding: 0 10px 10px; }
+.tcard { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--panel); cursor: pointer; }
+.tcard:hover { border-color: var(--line2); }
+.tcard canvas { width: 100%; aspect-ratio: 16 / 9; display: block; background: #0c0c0e; }
+.tcard .tcard-name { display: flex; align-items: center; gap: 5px; font-size: 11px; padding: 0 6px 6px; min-width: 0; }
+.tcard .tcard-name span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tcard.set-off { opacity: 0.5; }
 .group-h { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; margin-bottom: 6px; }
 .tgroup { border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 8px; background: var(--raised); }
 .tgroup summary { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; cursor: pointer; list-style: none; font-size: 12px; }
@@ -309,6 +325,9 @@ dialog.terms a { color: var(--cyan); word-break: break-all; }
 .easy-hero .pick-sets { margin-top: 14px; }
 .set-badge { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid var(--amber); border-radius: 3px; color: var(--amber); font-size: 10px; line-height: 15px; vertical-align: 1px; }
 .set-badge.ex { border-color: var(--cyan, #4cc9d9); color: var(--cyan, #4cc9d9); }
+.set-badge.set-horror { border-color: #c0544a; color: #e0786e; }
+.set-badge.set-typo { border-color: #9aa3ad; color: #c5ccd3; }
+.set-badge.set-kinetic { border-color: #7fbf6a; color: #9fd98a; }
 .checks label.set-off { opacity: 0.45; }
 .checks label.set-off .set-badge { border-color: var(--muted); color: var(--muted); }
 .stile { position: relative; }
@@ -333,3 +352,51 @@ button.small.primary { padding: 4px 12px; }
 .unify-box { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .center-dir { gap: 6px; margin: -2px 0 8px 26px; font-size: 12px; }
 .center-dir select { width: auto; }
+
+/* ================= スマホ mode (#app.is-mobile) =================
+   one column: sticky header with おまかせ, the preview right under it, then folding sections */
+.omk-top, .menu-btn { display: none; }
+.mode-mobile { display: none; }
+@media (max-width: 900px), (pointer: coarse) { .mode-mobile { display: inline-block; } }
+#app.is-mobile .mode-mobile { display: inline-block; }
+#app.is-mobile .bar { position: sticky; top: 0; z-index: 40; gap: 8px; padding: 8px 10px; }
+#app.is-mobile .brand .tag, #app.is-mobile .brand .word, #app.is-mobile .tour-btn { display: none; }
+#app.is-mobile .brand .mark { font-size: 22px; }
+#app.is-mobile .omk-top, #app.is-mobile .menu-btn { display: inline-block; }
+#app.is-mobile .omk-top { order: 2; margin-left: auto; padding: 9px 16px; font-size: 15px; }
+#app.is-mobile .menu-btn { order: 3; padding: 9px 10px; }
+#app.is-mobile .modes { order: 4; flex: 1 1 100%; }
+#app.is-mobile .modes button { flex: 1 1 0; padding: 7px 4px; }
+#app.is-mobile .proj, #app.is-mobile .acts, #app.is-mobile .lang-switch { display: none; order: 5; flex: 1 1 100%; }
+#app.is-mobile.menu-open .proj, #app.is-mobile.menu-open .acts, #app.is-mobile.menu-open .lang-switch { display: flex; }
+#app.is-mobile .acts > * { flex: 1 1 auto; }
+#app.is-mobile .work { display: flex; flex-direction: column; overflow: visible; }
+#app.is-mobile .col-left, #app.is-mobile .col-right { overflow: visible; border: 0; border-top: 1px solid var(--line); }
+#app.is-mobile .col-stage { order: -1; position: sticky; top: var(--mbar, 96px); z-index: 30; background: var(--ink); padding: 8px 10px; gap: 6px; box-shadow: 0 8px 18px rgba(0,0,0,0.45); }
+#app.is-mobile .viewport canvas { max-height: 34vh; }
+#app.is-mobile .tl-bar, #app.is-mobile #timeline, #app.is-mobile .cutinfo, #app.is-mobile .transport .vol, #app.is-mobile #btnLoop, #app.is-mobile #btnShuffle, #app.is-mobile #btnOmakase { display: none; }
+#app.is-mobile .transport { gap: 8px; flex-wrap: nowrap; }
+#app.is-mobile .transport .hist-btns { display: inline-flex; }
+#app.is-mobile .col-right { order: 0; }
+#app.is-mobile .col-left { order: 1; }
+#app.is-mobile .easy-hero .omakase { display: none; }
+#app.is-mobile button, #app.is-mobile select, #app.is-mobile input[type=text], #app.is-mobile label.file { min-height: 40px; }
+#app.is-mobile button.small, #app.is-mobile .ln button, #app.is-mobile .ln select { min-height: 34px; }
+#app.is-mobile .easy .fields, #app.is-mobile .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* folding sections: tap the heading */
+#app.is-mobile .sec > .sec-h h2 { cursor: pointer; font-size: 13px; }
+#app.is-mobile .sec > .sec-h h2::before { content: '▾'; display: inline-block; width: 1.2em; color: var(--amber); }
+#app.is-mobile .sec.fold > .sec-h h2::before { content: '▸'; }
+#app.is-mobile .sec.fold > :not(.sec-h) { display: none !important; }
+/* lines: one compact row each, tap to open its tools */
+#app.is-mobile .ln { grid-template-columns: 22px minmax(0, 1fr); padding: 8px 6px; }
+#app.is-mobile .ln .time { display: none; }
+#app.is-mobile .ln .meta { display: none; grid-column: 1 / -1; }
+#app.is-mobile .ln.open .meta { display: block; }
+#app.is-mobile .ln .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#app.is-mobile .ln.open .txt { white-space: normal; }
+.exp-share { width: 100%; margin-bottom: 8px; }
+#app.is-mobile .transport .tc.muted, #app.is-mobile #timeDur { display: none; }
+#app.is-mobile .transport input[type=range] { flex: 1 1 40px; min-width: 0; }
+#app.is-mobile .transport .hist-btns button { min-width: 36px; padding: 4px 8px; }
+#app.is-mobile button.play { flex: none; width: 44px; }

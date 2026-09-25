@@ -46,10 +46,15 @@ const vcfg = (c, w, h, fps, bitrate, hw) => {
   return cfg;
 };
 async function supported(cfg) { try { const s = await VideoEncoder.isConfigSupported(cfg); return !!(s && s.supported); } catch (e) { return false; } }
-J.pickVideoCodec = async (w, h, fps, bitrate) => {
-  if (typeof VideoEncoder === 'undefined') return null;
-  for (const c of VIDEO_CANDS) { const cfg = vcfg(c, w, h, fps, bitrate); if (await supported(cfg)) return Object.assign({}, c, { cfg }); }
-  return null;
+const codecMemo = new Map();   // the answer never changes for a page load; asking the browser again costs ~100 ms
+J.pickVideoCodec = (w, h, fps, bitrate) => {
+  const key = [w, h, fps, bitrate].join('/');
+  if (!codecMemo.has(key)) codecMemo.set(key, (async () => {
+    if (typeof VideoEncoder === 'undefined') return null;
+    for (const c of VIDEO_CANDS) { const cfg = vcfg(c, w, h, fps, bitrate); if (await supported(cfg)) return Object.assign({}, c, { cfg }); }
+    return null;
+  })());
+  return codecMemo.get(key).then(vc => vc && Object.assign({}, vc, { cfg: Object.assign({}, vc.cfg) }));
 };
 /* the encoders to try, best first: the browser's choice, then the same codec in software (GPU encoders are the usual
    reason an export fails every time on one PC), then a simpler profile / lower bitrate in software, then VP9 */
@@ -164,7 +169,8 @@ async function encodeMP4({ plan, project, audio, onProgress, signal, range, file
       const vf = new VideoFrame(canvas, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
       try { venc.encode(vf, { keyFrame: i % (fps * 2) === 0 }); } finally { vf.close(); }
       let spins = 0;
-      while (venc.encodeQueueSize > 4 && !err) { await new Promise(r => setTimeout(r, 2)); if (++spins > 15000) throw new Error('エンコーダーが応答しません'); }
+      // (time in the background doesn't count: a phone pauses the encoder while the page is hidden)
+      while (venc.encodeQueueSize > 4 && !err) { await new Promise(r => setTimeout(r, 2)); if (!document.hidden && ++spins > 15000) throw new Error('エンコーダーが応答しません'); }
       // an encoder that accepts frames but never returns any has failed silently (seen with some GPU drivers)
       if (i === Math.min(total - 1, fps * 3) && outFrames === 0) { await venc.flush(); if (!outFrames) throw new Error('エンコーダーが出力を返しません'); }
       if (i % 3 === 0) { onProgress && onProgress(i / total, `フレーム ${i + 1}/${total}${note || ''}`); await new Promise(r => setTimeout(r, 0)); }

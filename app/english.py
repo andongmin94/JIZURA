@@ -1,6 +1,19 @@
 """English copy for the browser edition. The Japanese source stays authoritative."""
 
 BODY = {
+    '文字PV系の部品を使う': 'Use typographic parts',
+    'キネティックの部品を使う': 'Use kinetic parts',
+    'ホラーの演出も使う': 'Include horror effects',
+    '<small>線・数字・字組みだけで見せる、文字PVらしい部品（約50）</small>': '<small>About 50 parts that work with lines, numbers and type alone, in the spirit of lyric videos</small>',
+    '<small>語ごとに動く・跳ねる・積み上がる、動き重視の部品（約50）</small>': '<small>About 50 motion-first parts: words move, bounce and stack one by one</small>',
+    '<small>不気味な雰囲気の部品（約50）と配色セット3。オンにすると、おまかせの雰囲気に「ホラー」が加わります</small>': '<small>About 50 eerie parts and 3 styles. When on, Randomize adds a Horror mood</small>',
+    '<small>「文」印の手法。オフにすると、おまかせやシャッフルでは選ばれません</small>': '<small>Techniques marked T. When off, Randomize and Shuffle skip them</small>',
+    '<small>「キ」印の手法。オフにすると、おまかせやシャッフルでは選ばれません</small>': '<small>Techniques marked K. When off, Randomize and Shuffle skip them</small>',
+    '<small>「ホ」印の手法とスタイル。おまかせでは雰囲気が「ホラー」のときだけ使います</small>': '<small>Techniques and styles marked H. Randomize uses them only in the Horror mood</small>',
+    'title="スタイル・雰囲気・演出・配色をまるごとランダムに">おまかせ</button>': 'title="Randomize style, mood, effects and palette">Randomize</button>',
+    'aria-controls="appMenu">メニュー</button>': 'aria-controls="appMenu">Menu</button>',
+    'title="スマホ向けの画面（おまかせを上に固定、行はたたんで表示）">スマホ</button>': 'title="Phone layout (Randomize pinned at the top, lines folded)">Phone</button>',
+    '<button class="exp-share primary" hidden>共有して保存</button>': '<button class="exp-share primary" hidden>Share / save</button>',
     '<label class="row center-dir" hidden>縦長のとき<select class="centerDirSel" aria-label="縦長の画面での分け方"><option value="tb">上下に分ける</option><option value="lr">左右に分ける</option></select></label>': '<label class="row center-dir" hidden>On tall frames<select class="centerDirSel" aria-label="Split on tall frames"><option value="tb">Top / bottom</option><option value="lr">Left / right</option></select></label>',
     '<span>統一感</span>': '<span>Unified look</span>',
     '<span>文字整列</span>': '<span>Typesetting</span>',
@@ -99,6 +112,7 @@ BODY = {
     'スタイル次第': 'Auto (by style)', '常に表示': 'Always show', '表示しない': 'Hide',
     '同じシードなら同じ構成になります。行ごとの「再抽選」「ロック」は左の行リストから。': 'The same seed produces the same arrangement. Reroll or lock individual lines in the list on the left.',
     '手法を名前で絞り込み': 'Filter techniques by name',
+    '画面に見えているプレビューは自動でループします。': 'Previews on screen loop automatically.',
     'グリーンバック／ブラックバックにすると、白い文字と演出だけを単色の背景の上に描きます（背景の模様・紙の質感・粒子・周辺減光は入りません）。プレビューにもそのまま反映されます。グリーンバックは動画編集ソフトのクロマキーで、ブラックバックは「スクリーン」合成や輝度キーで抜いて、別の映像の上に重ねられます。': 'Green screen and black background render white text and effects over a solid color, without background patterns, paper texture, particles or vignette. The preview shows the export. Use a chroma key for green or Screen blending / a luma key for black to composite over footage.',
     '曲を動画に含める': 'Include audio in video', '連番PNG（ZIP）': 'PNG sequence (ZIP)',
     '透過PNG（ZIP・背景なし）': 'Transparent PNG (ZIP)',
@@ -124,6 +138,20 @@ BODY = {
 }
 
 UI = {
+    "'文字PV系の部品：使う'": "'Typographic parts: on'",
+    "'文字PV系の部品：使わない（おまかせ・シャッフルで選ばれません）'": "'Typographic parts: off (not picked by Randomize or Shuffle)'",
+    "'キネティックの部品：使う'": "'Kinetic parts: on'",
+    "'キネティックの部品：使わない（おまかせ・シャッフルで選ばれません）'": "'Kinetic parts: off (not picked by Randomize or Shuffle)'",
+    "'ホラーの演出：使う（おまかせの雰囲気に「ホラー」が加わります）'": "'Horror effects: on (Randomize adds a Horror mood)'",
+    "'ホラーの演出：使わない'": "'Horror effects: off'",
+    "'（このセットがオフのため、おまかせでは選ばれません）'": "' (this set is off for automatic picks)'",
+    "'（このセットがオフのため、自動では選ばれません）'": "' (this set is off for automatic picks)'",
+    "{ name: 'ホラー', badge: 'ホ' }": "{ name: 'Horror', badge: 'H' }",
+    "{ name: '文字PV系', badge: '文' }": "{ name: 'Typographic', badge: 'T' }",
+    "{ name: 'キネティック', badge: 'キ' }": "{ name: 'Kinetic', badge: 'K' }",
+    "'スマホの画面では 1080p で書き出します'": "'In the Phone layout the export is 1080p at most'",
+    "`読み込んだ書体（${[...new Set(lost)].join('・')}）がこのブラウザにないため、書き出しを止めました。「フォント」から同じファイルを読み込み直すか、別の書体を選んでください`": "`The uploaded font (${[...new Set(lost)].join(', ')}) is not in this browser, so the export was stopped. Load the same file again under Fonts, or pick another font`",
+    "`読み込んだ書体（${missing.join('・')}）がこのブラウザにありません。「フォント」から同じファイルを読み込み直してください（それまでは近い書体で表示します）`": "`The uploaded font (${missing.join(', ')}) is not in this browser. Load the same file again under Fonts (a similar font is used until then)`",
     "'縦長の画面：左右に分けます'": "'Tall frames: split left / right'",
     "'縦長の画面：上下に分けます'": "'Tall frames: split top / bottom'",
     "'（最初の方法では失敗したため、別のエンコーダーで書き出しました）'": "' (the first method failed, so another encoder was used)'",
