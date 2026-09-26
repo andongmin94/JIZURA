@@ -15,7 +15,57 @@ const ICON = {
   range: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 3v10M13 3v10"/><path d="M5.5 8h5M8.5 5.5L11 8l-2.5 2.5"/></svg>',
 };
 
-const S = { project: null, plan: null, audio: null, renderer: new J.Renderer(), playing: false, t: 0, t0: 0, loop: true, need: true, exporting: null, tap: null, slow: false, lineEls: [], curLine: -2 };
+const S = { project: null, plan: null, audio: null, renderer: new J.Renderer(), playing: false, t: 0, t0: 0, loop: 'all', loopHold: null, need: true, exporting: null, tap: null, slow: false, lineEls: [], curLine: -2 };
+const LOOP_CYCLE = ['all', 'line', 'cut', false];
+const LOOP_COPY = {
+  all:  { ja: 'ループ', en: 'Loop', titleJa: '全体を繰り返し', titleEn: 'Loop the whole piece' },
+  line: { ja: '行ループ', en: 'Line loop', titleJa: 'この行を繰り返し', titleEn: 'Loop this line' },
+  cut:  { ja: 'カットループ', en: 'Cut loop', titleJa: 'このカットを繰り返し', titleEn: 'Loop this cut' },
+  off:  { ja: 'ループ', en: 'Loop', titleJa: '繰り返しなし', titleEn: 'No loop' },
+};
+const isEn = () => document.documentElement.lang === 'en';
+function cutAround(t) {
+  const c = J.cutAt(S.plan, t);
+  if (c) return c;
+  const cs = S.plan.cuts;
+  let ans = null;
+  for (let i = 0; i < cs.length; i++) { if (cs[i].start <= t) ans = cs[i]; else break; }
+  return ans;
+}
+function loopRange(t) {
+  const T = t != null ? t : S.t;
+  const endAll = S.plan.duration;
+  if (S.loop === 'cut') {
+    const cut = cutAround(T);
+    return cut ? { start: cut.start, end: cut.end } : { start: 0, end: endAll };
+  }
+  if (S.loop === 'line') {
+    const cut = cutAround(T);
+    if (!cut || cut.line < 0) return cut ? { start: cut.start, end: cut.end } : { start: 0, end: endAll };
+    const same = S.plan.cuts.filter(c => c.line === cut.line && c.layout !== 'interlude' && c.layout !== 'title');
+    if (!same.length) return { start: cut.start, end: cut.end };
+    return { start: same[0].start, end: same[same.length - 1].end };
+  }
+  return { start: 0, end: endAll };
+}
+function refreshLoopHold(t) {
+  S.loopHold = (S.loop === 'line' || S.loop === 'cut') ? loopRange(t != null ? t : S.t) : null;
+}
+function activeLoopRange() {
+  if ((S.loop === 'line' || S.loop === 'cut') && S.loopHold) return S.loopHold;
+  return loopRange(S.t);
+}
+function syncLoopBtn() {
+  const b = $('btnLoop'); if (!b) return;
+  const key = S.loop || 'off';
+  const copy = LOOP_COPY[key] || LOOP_COPY.off;
+  const en = isEn();
+  b.textContent = en ? copy.en : copy.ja;
+  b.title = en ? copy.titleEn : copy.titleJa;
+  b.setAttribute('aria-pressed', String(!!S.loop));
+  b.dataset.mode = key;
+  refreshLoopHold();
+}
 
 /* WebAudio player (works inside sandboxed pages where blob media may be blocked) */
 const AP = {
@@ -58,6 +108,10 @@ function mergeProject(p) {
   for (const g of Object.keys(en)) en[g] = Object.assign(en[g], ((p && p.enabled) || {})[g] || {});
   o.enabled = en;
   o.overrides = (p && p.overrides) || {};
+  o.locks = { tech: {}, params: {} };
+  // project files are untrusted: only plain keys may be locked, and only on (never a value we did not write)
+  for (const [g, on] of Object.entries((p && p.locks && p.locks.tech) || {})) if (on === true && /^[\w-]+$/.test(g)) o.locks.tech[g] = true;
+  for (const [k, on] of Object.entries((p && p.locks && p.locks.params) || {})) if (on === true && /^[\w-]+$/.test(k)) o.locks.params[k] = true;
   delete o.appVersion;
   // project files are untrusted: colours must be colours, font keys plain keys (they end up in the page's HTML / CSS)
   o.colors = { enabled: !!(p && p.colors && p.colors.enabled) };
@@ -108,7 +162,10 @@ function replan() {
   for (const [i, o] of Object.entries(S.project.overrides || {})) if (o && o.lock && !Array.isArray(o.lockedCuts)) { const snap = J.lineSnapshot(S.plan, +i); if (snap) o.lockedCuts = snap; }
   langNote();
   if (S.t > S.plan.duration) S.t = 0;
+  refreshLoopHold();
   renderLines(); sizeViewport(); drawTimeline(); updateTimeUI();
+  lastCutIdx = -2;
+  if (typeof cutPick !== 'undefined' && cutPick.g) fillCutPick();
   S.need = true; autosave(); ensureFonts(); drawSwatch(); showNow();
   clearTimeout(warmTimer); warmTimer = setTimeout(warm, 450);
 }
@@ -198,11 +255,13 @@ function tick(now) {
   if (S.playing) {
     // rAF timestamps can precede the moment play()/seek() stamped t0 → clamp so t never goes negative
     let t = Math.max(0, S.audio ? AP.time() : (now - S.t0) / 1000);
-    if (t >= S.plan.duration - 1e-3) {
-      if (S.loop && !S.tap) { seek(0); t = 0; }
-      else { pause(); t = S.plan.duration - 1e-3; if (S.tap) stopTap(); }
+    const range = activeLoopRange();
+    if (t >= range.end - 1e-3) {
+      if (S.loop && !S.tap) { seek(range.start); t = range.start; }
+      else { pause(); t = Math.min(t, S.plan.duration - 1e-3); if (S.tap) stopTap(); }
     }
     S.t = t; S.need = true;
+    followTlPlayhead();
   }
   if (S.need) { S.need = false; draw(); }
 }
@@ -212,6 +271,7 @@ function updateTimeUI() {
   if (!S.scrubbing) $('scrub').value = String(Math.round(S.t / Math.max(0.001, S.plan.duration) * 10000));
 }
 function play() {
+  refreshLoopHold();
   if (S.audio) AP.play(S.audio.buffer, S.t);
   else S.t0 = performance.now() - S.t * 1000;
   S.playing = true; $('btnPlay').textContent = '❚❚'; $('btnPlay').setAttribute('aria-label', '一時停止');
@@ -224,6 +284,7 @@ function seek(t) {
   S.t = J.clamp(t, 0, Math.max(0, S.plan.duration - 1e-3));
   if (S.audio) { if (S.playing) AP.play(S.audio.buffer, S.t); }
   else S.t0 = performance.now() - S.t * 1000;
+  refreshLoopHold();
   S.need = true;
 }
 
@@ -241,6 +302,12 @@ function tlZoom(f, tc) {
   const z = J.clamp(TL.z * f, 1, Math.max(1, D / 2));
   const c = tc == null ? S.t : tc, frac = (c - TL.off) / vd;
   TL.z = z; TL.off = c - frac * (D / z); tlView(); drawTimeline();
+}
+// while playing zoomed in: redraw (which scrolls the view) once the playhead leaves the visible part
+function followTlPlayhead() {
+  if (!(TL.z > 1) || TL.drag >= 0) return;
+  const { vd, off } = tlView();
+  if (S.t < off || S.t > off + vd * 0.92) drawTimeline();
 }
 function drawTimeline() {
   const c = $('timeline'), dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -288,6 +355,11 @@ function drawTimeline() {
   if (TL.z > 1) {                                          // where the view sits in the whole song
     x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(0, h - 2 * dpr, w, 2 * dpr);
     x.fillStyle = '#f5a50c'; x.fillRect(off / D * w, h - 2 * dpr, Math.max(4, vd / D * w), 2 * dpr);
+  }
+  if (S.loop === 'line' || S.loop === 'cut') {
+    const r = activeLoopRange();
+    x.fillStyle = 'rgba(245,165,12,0.16)';
+    x.fillRect(X(r.start), 0, Math.max(2 * dpr, X(r.end) - X(r.start)), h);
   }
   const px = X(S.t);
   x.fillStyle = '#f5a50c'; x.fillRect(Math.round(px) - dpr, 0, 2 * dpr, h);
@@ -339,7 +411,105 @@ function bindFollow() {
 }
 
 /* ---------------- cut info ---------------- */
+const CHIP_GROUPS = [
+  ['layout', 'l', 'レイアウト'], ['enter', 'e', '登場'], ['hold', 'h', '保持'], ['exit', 'x', '退場'],
+  ['decor', '', '装飾'], ['treat', 't', '加工'], ['bg', 'b', '背景'], ['cam', 'c', 'カメラ'], ['trans', 'c', 'つなぎ'],
+];
+const cutPick = { g: null, line: -1, k: -1 };
 let lastCutIdx = -2;
+
+function lyricCutK(cut) {
+  if (!cut || cut.line < 0) return -1;
+  let k = 0;
+  for (const c of S.plan.cuts) {
+    if (c.line !== cut.line) continue;
+    if (!J.LAYOUTS[c.layout] || J.LAYOUTS[c.layout].special) continue;
+    if (c.index === cut.index) return k;
+    k++;
+  }
+  return -1;
+}
+function cutQuietSlot(line, k) {
+  const o = (S.project.overrides || {})[line] || {};
+  return (o.cutQuiet && (o.cutQuiet[k] || o.cutQuiet[String(k)])) || {};
+}
+function markCutQuiet(i, k, groups, on) {
+  if (i == null || i < 0 || k == null || k < 0) return;
+  const cur = Object.assign({}, S.project.overrides[i] || {});
+  const cutQuiet = Object.assign({}, cur.cutQuiet || {});
+  const q = Object.assign({}, cutQuiet[k] || cutQuiet[String(k)] || {});
+  delete cutQuiet[String(k)];
+  groups.forEach(g => { if (on) q[g] = true; else delete q[g]; });
+  if (Object.keys(q).length) cutQuiet[k] = q; else delete cutQuiet[k];
+  if (Object.keys(cutQuiet).length) cur.cutQuiet = cutQuiet; else delete cur.cutQuiet;
+  if (Object.keys(cur).length) S.project.overrides[i] = cur; else delete S.project.overrides[i];
+}
+function cutTechSlot(line, k) {
+  const o = (S.project.overrides || {})[line] || {};
+  const t = (o.cutTech && (o.cutTech[k] || o.cutTech[String(k)])) || {};
+  const lay = o.cutLayouts && (o.cutLayouts[k] || o.cutLayouts[String(k)]);
+  return lay && t.layout == null ? Object.assign({ layout: lay }, t) : t;
+}
+function cutGroupVal(cut, g) {
+  if (g === 'layout') return cut.layout || '';
+  if (g === 'enter') return cut.enter || '';
+  if (g === 'hold') return cut.hold || '';
+  if (g === 'exit') return cut.exit || '';
+  if (g === 'treat') return cut.treat || 'none';
+  if (g === 'bg') return cut.bg || 'none';
+  if (g === 'cam') return cut.cam || 'push';
+  if (g === 'trans') return cut.trans || '';
+  if (g === 'decor') return (cut.decor && cut.decor[0] && cut.decor[0].id) || '';
+  return '';
+}
+function groupName(g, k) {
+  if (!k) return 'なし';
+  const tbl = J.registry(g);
+  return (tbl && tbl[k] && tbl[k].name) || k;
+}
+function pickEnabledTech(g, opts) {
+  opts = opts || {};
+  const tbl = J.registry(g) || {};
+  const en = (S.project.enabled || {})[g] || {};
+  let keys = J.order(g).filter(key => {
+    const def = tbl[key];
+    if (!def || def.special) return false;
+    if (en[key] === false) return false;
+    return !J.randomOk || J.randomOk(S.project, g, key);
+  });
+  if (!keys.length) keys = J.order(g).filter(key => tbl[key] && !tbl[key].special && en[key] !== false);
+  if (g === 'layout' && opts.n != null) {
+    const fit = keys.filter(key => !J.LAYOUTS[key].fits || J.LAYOUTS[key].fits(opts.n));
+    if (fit.length) keys = fit;
+  }
+  if (opts.allowNone && !keys.includes('none')) keys = ['none'].concat(keys);
+  if (opts.avoid && keys.length > 1) keys = keys.filter(key => key !== opts.avoid);
+  if (!keys.length) return '';
+  return keys[(Math.random() * keys.length) | 0];
+}
+function rerollCurrentCut(kind) {
+  if (S.exporting || S.tap) return;
+  const cut = J.cutAt(S.plan, S.t);
+  const k = lyricCutK(cut);
+  if (!cut || k < 0) { toast('この位置のカットは抽選できません'); return; }
+  remember();
+  const n = [...String(cut.text || '').replace(/\s+/g, '')].length;
+  const groups = kind === 'omakase'
+    ? CHIP_GROUPS.map(x => x[0])
+    : ['layout', 'enter', 'hold', 'exit', 'cam', 'trans'];
+  const t0 = S.t;
+  groups.forEach(g => {
+    const allowNone = g === 'decor' || g === 'trans';
+    const key = pickEnabledTech(g, { avoid: kind === 'omakase' ? cutGroupVal(cut, g) : null, allowNone, n });
+    if (key) setCutTech(cut.line, k, g, key);
+  });
+  markCutQuiet(cut.line, k, groups, true);
+  closeCutPick();
+  replan();
+  commit();
+  seek(t0);
+  toast(kind === 'omakase' ? 'このカットをおまかせ' : 'このカットをシャッフル');
+}
 function updateCutInfo() {
   const cut = J.cutAt(S.plan, S.t);
   const idx = cut ? cut.index : -1;
@@ -348,18 +518,100 @@ function updateCutInfo() {
   if (idx === lastCutIdx) return;
   lastCutIdx = idx;
   const el = $('cutInfo');
-  if (!cut) { el.innerHTML = '<span class="hint">この位置にカットはありません</span>'; return; }
-  const chip = (cls, k, v) => `<span class="chip ${cls}"><b>${k}</b>${v}</span>`;
-  const n = (tbl, k) => (tbl[k] ? tbl[k].name : k);
-  el.innerHTML = [
-    `<span class="chip mono">#${String(cut.index + 1).padStart(2, '0')}</span>`,
-    chip('l', 'レイアウト', n(J.LAYOUTS, cut.layout)), chip('e', '登場', n(J.ENTER, cut.enter)), chip('h', '保持', n(J.HOLD, cut.hold)), chip('x', '退場', n(J.EXIT, cut.exit)),
-    cut.decor && cut.decor.length ? chip('', '装飾', cut.decor.map(d => n(J.DECOR, d.id)).join('・')) : '',
-    cut.treat && cut.treat !== 'none' ? chip('t', '加工', n(J.TREAT, cut.treat)) : '',
-    cut.bg && cut.bg !== 'none' ? chip('b', '背景', n(J.BG, cut.bg)) : '',
-    cut.cam && cut.cam !== 'push' ? chip('c', 'カメラ', n(J.CAMERA, cut.cam)) : '',
-    cut.trans ? chip('c', 'つなぎ', n(J.TRANS, cut.trans)) : '',
-  ].join('');
+  if (!cut) { el.innerHTML = '<span class="hint">この位置にカットはありません</span>'; closeCutPick(); return; }
+  if (S.mode !== 'pro') {          // かんたん／スマホは本家と同じ静的なチップ表示
+    closeCutPick();
+    const chip = (cls, k, v) => `<span class="chip ${cls}"><b>${k}</b>${v}</span>`;
+    const n = (tbl, k) => (tbl[k] ? tbl[k].name : k);
+    el.innerHTML = [
+      `<span class="chip mono">#${String(cut.index + 1).padStart(2, '0')}</span>`,
+      chip('l', 'レイアウト', n(J.LAYOUTS, cut.layout)), chip('e', '登場', n(J.ENTER, cut.enter)), chip('h', '保持', n(J.HOLD, cut.hold)), chip('x', '退場', n(J.EXIT, cut.exit)),
+      cut.decor && cut.decor.length ? chip('', '装飾', cut.decor.map(d => n(J.DECOR, d.id)).join('・')) : '',
+      cut.treat && cut.treat !== 'none' ? chip('t', '加工', n(J.TREAT, cut.treat)) : '',
+      cut.bg && cut.bg !== 'none' ? chip('b', '背景', n(J.BG, cut.bg)) : '',
+      cut.cam && cut.cam !== 'push' ? chip('c', 'カメラ', n(J.CAMERA, cut.cam)) : '',
+      cut.trans ? chip('c', 'つなぎ', n(J.TRANS, cut.trans)) : '',
+    ].join('');
+    return;
+  }
+  const k = lyricCutK(cut);
+  const slot = k >= 0 ? cutTechSlot(cut.line, k) : {};
+  const quiet = k >= 0 ? cutQuietSlot(cut.line, k) : {};
+  const bits = [`<span class="chip mono">#${String(cut.index + 1).padStart(2, '0')}</span>`];
+  CHIP_GROUPS.forEach(([g, cls, label]) => {
+    const forced = slot[g] != null && slot[g] !== '' && !quiet[g];
+    bits.push(`<button type="button" class="chip ${cls}${forced ? ' is-forced' : ''}" data-g="${g}" aria-pressed="${cutPick.g === g ? 'true' : 'false'}" ${k < 0 ? 'disabled' : ''}><b>${label}</b>${escapeHtml(groupName(g, cutGroupVal(cut, g)))}</button>`);
+  });
+  bits.push(`<button type="button" class="ghost small cut-roll" data-roll="shuffle" ${k < 0 ? 'disabled' : ''} title="このカットだけ構成を再抽選">シャッフル</button>`);
+  bits.push(`<button type="button" class="ghost small cut-roll accent" data-roll="omakase" ${k < 0 ? 'disabled' : ''} title="このカットだけ手法をランダムに">おまかせ</button>`);
+  el.innerHTML = bits.join('');
+  if (k >= 0) {
+    el.querySelectorAll('button.chip[data-g]').forEach(b => b.addEventListener('click', () => toggleCutPick(b.dataset.g, cut, k)));
+    el.querySelectorAll('button.cut-roll').forEach(b => b.addEventListener('click', () => rerollCurrentCut(b.dataset.roll)));
+  }
+  followCutPick(cut, k);
+}
+function followCutPick(cut, k) {
+  if (S.mode !== 'pro' || !cutPick.g) return;
+  const p = $('cutPick');
+  if (!cut || k < 0) {
+    cutPick.g = null; cutPick.line = -1; cutPick.k = -1;
+    if (p) p.hidden = true;
+    return;
+  }
+  cutPick.line = cut.line;
+  cutPick.k = k;
+  if (p) p.hidden = false;
+  fillCutPick();
+}
+function closeCutPick() {
+  cutPick.g = null; cutPick.line = -1; cutPick.k = -1;
+  const p = $('cutPick'); if (p) p.hidden = true;
+  lastCutIdx = -2;
+}
+function toggleCutPick(g, cut, k) {
+  if (S.mode !== 'pro') return;
+  if (cutPick.g === g && cutPick.line === cut.line && cutPick.k === k) { closeCutPick(); updateCutInfo(); return; }
+  cutPick.g = g; cutPick.line = cut.line; cutPick.k = k;
+  $('cutPick').hidden = false;
+  fillCutPick();
+  lastCutIdx = -2; updateCutInfo();
+}
+function fillCutPick() {
+  const g = cutPick.g, grid = $('cutPickGrid');
+  if (!g || !grid) return;
+  const meta = CHIP_GROUPS.find(x => x[0] === g);
+  const cut = J.cutAt(S.plan, S.t);
+  $('cutPickTitle').textContent = (meta ? meta[2] : g) + (cut ? ' · #' + String(cut.index + 1).padStart(2, '0') : '');
+  const cur = cut ? cutGroupVal(cut, g) : '';
+  const forced = cutTechSlot(cutPick.line, cutPick.k)[g];
+  const onKey = forced || cur;
+  grid.innerHTML = '';
+  if (g === 'decor' || g === 'trans') {
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.className = 'tcard' + (forced === 'none' ? ' is-on' : '');
+    none.innerHTML = '<span class="tcard-name" style="padding:16px 6px"><span>なし</span></span>';
+    none.addEventListener('click', () => { setCutTech(cutPick.line, cutPick.k, g, 'none'); replan(); });
+    grid.appendChild(none);
+  }
+  const [W, H] = J.designSize(S.project.aspect || '16:9');
+  const th = 80, tw = Math.max(72, Math.round(th * W / H));
+  const items = J.order(g).filter(key => J.registry(g)[key] && !J.registry(g)[key].special);
+  items.forEach(key => {
+    const def = J.registry(g)[key];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tcard' + (key === onKey ? ' is-on' : '');
+    b.title = key;
+    b.innerHTML = `<canvas width="${tw}" height="${th}" data-g="${g}" data-k="${key}"></canvas><span class="tcard-name"><span>${escapeHtml(def.name)}</span>${setBadges(def)}</span>`;
+    b.addEventListener('click', () => {
+      setCutTech(cutPick.line, cutPick.k, g, key);
+      replan();
+    });
+    grid.appendChild(b);
+  });
+  queueThumbs(grid);
 }
 
 /* ---------------- line list ---------------- */
@@ -411,11 +663,18 @@ function renderLines() {
       replan();
     });
     const cutsEl = q('.cuts');
-    S.plan.cuts.filter(c => c.line === i && J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special).forEach(c => {
-      const sp = document.createElement('span'); sp.textContent = J.LAYOUTS[c.layout].name; sp.title = `${c.text}｜${J.ENTER[c.enter].name} → ${J.EXIT[c.exit].name}`;
-      sp.style.borderColor = `hsla(${layoutHue(c.layout)},70%,58%,0.7)`;
-      sp.addEventListener('click', () => seek(c.start + Math.min(c.dur * 0.5, c.inDur + 0.05)));
-      cutsEl.appendChild(sp);
+    S.plan.cuts.filter(c => c.line === i && J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special).forEach((c, k) => {
+      const forced = o.cutLayouts && o.cutLayouts[k];
+      const sel = document.createElement('select');
+      sel.className = 'cut-lay pro-only' + (forced ? ' is-forced' : '');
+      sel.innerHTML = layoutOpts;
+      sel.value = forced || c.layout;
+      sel.title = `${c.text}｜${J.ENTER[c.enter].name} → ${J.EXIT[c.exit].name}`;
+      sel.setAttribute('aria-label', `${i + 1}行目 カット${k + 1}のレイアウト`);
+      sel.style.borderColor = `hsla(${layoutHue(c.layout)},70%,58%,0.7)`;
+      sel.addEventListener('pointerdown', () => seek(c.start + Math.min(c.dur * 0.5, c.inDur + 0.05)));
+      sel.addEventListener('change', e => { setCutLayout(i, k, e.target.value); replan(); seek(c.start + Math.min(c.dur * 0.5, c.inDur + 0.05)); });
+      cutsEl.appendChild(sel);
     });
     // スマホ: a row is one line of text; tapping it opens its tools (and jumps there)
     if (S.openLine === i) li.classList.add('open');
@@ -552,6 +811,31 @@ function setOv(i, patch) {
   for (const k of Object.keys(cur)) if (cur[k] === undefined || cur[k] === false || cur[k] === '') delete cur[k];
   if (Object.keys(cur).length) S.project.overrides[i] = cur; else delete S.project.overrides[i];
 }
+function setCutLayout(i, k, layout) { setCutTech(i, k, 'layout', layout); }
+function setCutTech(i, k, group, key) {
+  if (i == null || i < 0 || k == null || k < 0) return;
+  const cur = Object.assign({}, S.project.overrides[i] || {});
+  const cutTech = Object.assign({}, cur.cutTech || {});
+  const slot = Object.assign({}, cutTech[k] || cutTech[String(k)] || {});
+  delete cutTech[String(k)];
+  if (!key) delete slot[group];
+  else slot[group] = key;
+  if (Object.keys(slot).length) cutTech[k] = slot;
+  else delete cutTech[k];
+  if (Object.keys(cutTech).length) cur.cutTech = cutTech; else delete cur.cutTech;
+  const cutQuiet = Object.assign({}, cur.cutQuiet || {});
+  const q = Object.assign({}, cutQuiet[k] || cutQuiet[String(k)] || {});
+  delete cutQuiet[String(k)];
+  delete q[group];
+  if (Object.keys(q).length) cutQuiet[k] = q; else delete cutQuiet[k];
+  if (Object.keys(cutQuiet).length) cur.cutQuiet = cutQuiet; else delete cur.cutQuiet;
+  if (group === 'layout') {
+    const cutLayouts = Object.assign({}, cur.cutLayouts || {});
+    if (!key) delete cutLayouts[k]; else cutLayouts[k] = key;
+    if (Object.keys(cutLayouts).length) cur.cutLayouts = cutLayouts; else delete cur.cutLayouts;
+  }
+  if (Object.keys(cur).length) S.project.overrides[i] = cur; else delete S.project.overrides[i];
+}
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 /* ---------------- style tab ---------------- */
@@ -643,7 +927,7 @@ function randomPalette() {
 
 /* ---------------- history of looks (◀ ▶) ---------------- */
 // only the "look" is tracked — lyrics, timing and output settings are never rolled back
-const HKEYS = ['style', 'mood', 'seed', 'fx', 'enabled', 'fonts', 'colors', 'overrides'];
+const HKEYS = ['style', 'mood', 'seed', 'fx', 'enabled', 'fonts', 'colors', 'overrides', 'locks'];
 const H = { list: [], i: -1 };
 const lookSnap = () => JSON.stringify(Object.fromEntries(HKEYS.map(k => [k, S.project[k] ?? null])));
 function remember() {            // call before changing the look: makes sure the current look is on the stack
@@ -674,13 +958,91 @@ function updateHist() {
   $('histPos').textContent = H.list.length > 1 ? `${H.i + 1} / ${H.list.length}` : '';
 }
 
+/* ---------------- locks (what Randomize / Shuffle must not touch) ----------------
+   project.locks = { tech: { group: true }, params: { key: true } }
+   tech:   freezes that group's ON/OFF selection, i.e. the candidate count the panel shows (120/140, 28/28).
+           Randomize re-picks which techniques are candidates, so freezing the pool is what keeps the count —
+           this does not pin one technique in place.
+   params: freezes the current value of the effects sliders, on-twos and flash.
+   Neither goes into J.plan: they only bracket the places that rewrite the look (Randomize, mood reroll). */
+const LOCK_TITLE_ON = 'おまかせ／シャッフルで変えないようにロック';
+const TECH_LOCK_ON = 'おまかせでON／OFFを変えないようにロック';
+const LOCK_TITLE_OFF = 'ロック中。クリックで解除';
+function locksOf() {
+  const P = S.project;
+  if (!P.locks) P.locks = { tech: {}, params: {} };
+  if (!P.locks.tech) P.locks.tech = {};
+  if (!P.locks.params) P.locks.params = {};
+  return P.locks;
+}
+function lockOn(k) { return !!locksOf().params[k]; }
+function lockName(k) {
+  const f = FX.find(x => x[0] === k);
+  return f ? f[1] : k;
+}
+function groupLabel(g) { const m = GROUPS.find(x => x[0] === g); return m ? m[1] : g; }
+function toggleTechLock(g) {
+  const L = locksOf();
+  remember();
+  if (L.tech[g]) { delete L.tech[g]; toast('ロック解除：' + groupLabel(g)); }
+  else { L.tech[g] = true; toast('ロック：' + groupLabel(g)); }
+  commit(); autosave(); renderTech();
+}
+function toggleParamLock(k) {
+  const L = locksOf();
+  remember();
+  if (L.params[k]) { delete L.params[k]; toast('ロック解除：' + lockName(k)); }
+  else { L.params[k] = true; toast('ロック：' + lockName(k)); }
+  commit(); autosave(); renderFx();
+}
+function lockedEnabled() {                        // ON/OFF selection of every locked group, as it is now
+  const P = S.project, out = {};
+  for (const g of Object.keys(locksOf().tech)) if (P.enabled && P.enabled[g]) out[g] = Object.assign({}, P.enabled[g]);
+  return out;
+}
+function restoreEnabled(keep) {                   // put the locked groups back after Randomize
+  const P = S.project;
+  for (const g of Object.keys(keep || {})) { P.enabled = P.enabled || {}; P.enabled[g] = keep[g]; }
+}
+function lockedParams() {                         // current value of every locked effect / set switch
+  const out = {}, L = locksOf(), F = S.project.fx;
+  for (const k of Object.keys(L.params)) {
+    if (!L.params[k]) continue;
+    if (k === 'koma') out[k] = J.komaOf(F);                      // on-twos: freeze the effective value even when unset
+    else if (k === 'flash') out[k] = !!F.flash;
+    else if (F[k] != null) out[k] = F[k];
+  }
+  return out;
+}
+function restoreParams(keep) {
+  const P = S.project;
+  for (const k of Object.keys(keep || {})) P.fx[k] = keep[k];
+}
+function lockBtn(k, anchor) {                     // lock button for effects that are not sliders (on-twos, flash)
+  const p = anchor.parentElement;
+  let b = p.querySelector(':scope > .lk[data-lk="' + k + '"]');
+  if (!b) {
+    b = document.createElement('button');
+    b.type = 'button'; b.className = 'icon ghost lk pro-only'; b.dataset.lk = k;
+    b.innerHTML = ICON.lock;
+    b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); toggleParamLock(k); });
+    anchor.insertAdjacentElement('afterend', b);
+  }
+  const on = !!locksOf().params[k];
+  b.setAttribute('aria-pressed', String(on));
+  b.title = on ? LOCK_TITLE_OFF : LOCK_TITLE_ON;
+  return b;
+}
+
 /* ---------------- おまかせ ---------------- */
 function restartPreview() { seek(0); if (!S.playing && S.mode !== 'pro') play(); }
 function omakase() {
   if (S.exporting || S.tap) return;
   remember();
+  const keepE = lockedEnabled(), keepP = lockedParams();
   const r = J.omakase(S.project);
   Object.assign(S.project, r);
+  restoreEnabled(keepE); restoreParams(keepP);
   fontKey = ''; syncUI(); replan(); commit();
   toast(`おまかせ：${J.STYLES[r.style].name} × ${J.MOODS[r.mood].name}`, r.colors.accentOn ? [r.colors.accent, r.colors.ghostA, r.colors.ghostB] : null);
   restartPreview();
@@ -698,8 +1060,10 @@ function rerollPart(part) {
     P.colors.enabled = false;
     msg = `スタイル：${J.STYLES[P.style].name}`;
   } else if (part === 'mood') {
+    const keepE = lockedEnabled(), keepP = lockedParams();
     const r = J.omakase(P);
     Object.assign(P, { mood: r.mood, fx: r.fx, enabled: r.enabled });
+    restoreEnabled(keepE); restoreParams(keepP);
     msg = `雰囲気：${J.MOODS[r.mood].name}`;
   } else if (part === 'cut') {
     P.seed = (Math.random() * 1e9) | 0;
@@ -714,7 +1078,7 @@ function showNow() {
   const P = S.project, sc = S.plan.style.schemes[0];
   const moodName = P.mood && J.MOODS[P.mood] ? J.MOODS[P.mood].name : 'カスタム';
   const fk = S.plan.style.fonts.display[0];
-  const fontName = J.FONTS[fk] ? J.FONTS[fk].label : fk;
+  const fontName = J.FONTS[fk] ? (J.faceOf ? J.faceOf(fk) : J.FONTS[fk]).label : fk;   // the face actually drawn for the lyric language
   const cuts = S.plan.cuts.filter(c => c.line >= 0 && c.layout !== 'interlude');
   const kinds = new Set(cuts.map(c => c.layout)).size;
   const row = (k, v) => `<div class="now-row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
@@ -748,7 +1112,9 @@ function setMode(m) {
   $('modePro').setAttribute('aria-pressed', String(S.mode === 'pro'));
   try { localStorage.setItem('jizura.mode', S.mode); } catch (e) {}
   if (mobile) mobileInit();
-  if (easy) { showNow(); syncOut(); codecNoteSoon(); }
+    if (easy) { showNow(); syncOut(); codecNoteSoon(); }
+    if (easy) closeCutPick();
+    if (S.plan && S.lineEls && S.lineEls.length) { lastCutIdx = -2; updateCutInfo(); }
   sizeViewport(); drawTimeline(); loadThumbFonts();
 }
 
@@ -770,11 +1136,16 @@ function renderFx() {
   FX.forEach(([k, label]) => {
     const row = document.createElement('div'); row.className = 'slider';
     const v = S.project.fx[k] ?? 0.5;
-    row.innerHTML = `<label for="fx_${k}">${label}</label><input id="fx_${k}" type="range" min="0" max="1" step="0.01" value="${v}"><output>${Math.round(v * 100)}</output>`;
+    const lk = lockOn(k);
+    row.innerHTML = `<label for="fx_${k}">${label}</label><input id="fx_${k}" type="range" min="0" max="1" step="0.01" value="${v}"><output>${Math.round(v * 100)}</output>`
+      + `<button type="button" class="icon ghost lk pro-only" data-lk="${k}" aria-pressed="${lk}" title="${lk ? LOCK_TITLE_OFF : LOCK_TITLE_ON}">${ICON.lock}</button>`;
     const inp = row.querySelector('input'), out = row.querySelector('output');
+    row.querySelector('.lk').addEventListener('click', () => toggleParamLock(k));
     inp.addEventListener('input', () => { S.project.fx[k] = +inp.value; S.project.mood = null; out.textContent = Math.round(inp.value * 100); replanSoon(120); });
     box.appendChild(row);
   });
+  lockBtn('flash', $('fxFlash').closest('label'));
+  lockBtn('koma', $('fxKoma').closest('label'));
   $('fxFlash').checked = !!S.project.fx.flash;
   $('fxKoma').value = String(J.komaOf(S.project.fx));
   $('fxHud').value = S.project.fx.hud || 'auto';
@@ -825,7 +1196,8 @@ function paintTechCanvas(cv, g, k, t) {
 }
 function techPaneOpen() {
   const pane = $('techLists') && $('techLists').closest('.tabpane');
-  return pane && !pane.hidden;
+  const pick = $('cutPick');
+  return (pane && !pane.hidden) || (pick && !pick.hidden);
 }
 function ensurePreviewObs() {
   if (previewObs) return previewObs;
@@ -885,7 +1257,9 @@ function renderTech() {
     d.open = !!q || openGroups.has(g);
     const list = document.createElement('div'); list.className = 'checks tech-grid';
     d.addEventListener('toggle', () => { if (d.open) { openGroups.add(g); queueThumbs(list); } else openGroups.delete(g); });
-    d.innerHTML = `<summary><span class="tg-name">${label}</span><span class="tg-cnt mono">${onN}/${items.length}</span></summary><div class="tg-tools"><button class="ghost small" data-a="on">すべてON</button><button class="ghost small" data-a="off">すべてOFF</button><button class="ghost small" data-a="flip">反転</button></div>`;
+    const lked = !!locksOf().tech[g];
+    d.innerHTML = `<summary><span class="tg-name">${label}</span><span class="tg-cnt mono">${onN}/${items.length}</span>`
+      + `<button type="button" class="icon ghost lk pro-only" data-lk="${g}" aria-pressed="${lked}" title="${lked ? LOCK_TITLE_OFF : TECH_LOCK_ON}">${ICON.lock}</button></summary><div class="tg-tools"><button class="ghost small" data-a="on">すべてON</button><button class="ghost small" data-a="off">すべてOFF</button><button class="ghost small" data-a="flip">反転</button></div>`;
     const [tw, th] = (() => {
       const [W, H] = J.designSize(S.project.aspect || '16:9');
       const h = 90; return [Math.max(80, Math.round(h * W / H)), h];
@@ -900,6 +1274,7 @@ function renderTech() {
       l.querySelector('input').addEventListener('change', e => { en[k] = e.target.checked; S.project.mood = null; d.querySelector('.tg-cnt').textContent = `${items.filter(x => en[x] !== false).length}/${items.length}`; replanSoon(60); });
       list.appendChild(l);
     });
+    d.querySelector('summary .lk').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); toggleTechLock(g); });
     d.querySelectorAll('.tg-tools button').forEach(b => b.addEventListener('click', () => {
       const a = b.dataset.a;
       shown.forEach(k => { en[k] = a === 'on' ? true : a === 'off' ? false : en[k] === false; });
@@ -1103,7 +1478,18 @@ function bind() {
   $('tapBtn').addEventListener('click', tapNow);
   $('tapStop').addEventListener('click', () => { pause(); stopTap(); });
   $('btnPlay').addEventListener('click', () => (S.playing ? pause() : play()));
-  $('btnLoop').addEventListener('click', e => { S.loop = !S.loop; e.target.setAttribute('aria-pressed', String(S.loop)); });
+  const cutPickAuto = $('cutPickAuto'), cutPickClose = $('cutPickClose');
+  if (cutPickClose) cutPickClose.addEventListener('click', () => { closeCutPick(); updateCutInfo(); });
+  if (cutPickAuto) cutPickAuto.addEventListener('click', () => {
+    if (!cutPick.g) return;
+    setCutTech(cutPick.line, cutPick.k, cutPick.g, '');
+    replan();
+  });
+  $('btnLoop').addEventListener('click', () => {
+    const i = LOOP_CYCLE.indexOf(S.loop);
+    S.loop = LOOP_CYCLE[(i < 0 ? 0 : i + 1) % LOOP_CYCLE.length];
+    syncLoopBtn(); S.need = true;
+  });
   $('btnShuffle').addEventListener('click', () => { remember(); S.project.seed = (Math.random() * 1e9) | 0; $('seed').value = S.project.seed; replan(); commit(); });
   const sc = $('scrub');
   sc.addEventListener('input', () => { S.scrubbing = true; seek(sc.value / 10000 * S.plan.duration); });
@@ -1140,6 +1526,7 @@ function bind() {
     document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
     document.querySelectorAll('.tabpane').forEach(p => { p.hidden = p.dataset.pane !== b.dataset.tab; });
     if (b.dataset.tab === 'out') codecNote();
+    if (b.dataset.tab === 'tech') kickPreviewLoop();
     loadThumbFonts();
   }));
   $('fxFlash').addEventListener('change', e => { S.project.fx.flash = e.target.checked; replan(); });
@@ -1364,7 +1751,7 @@ async function restoreFonts() {
 /* ---------------- boot ---------------- */
 function boot() {
   S.project = loadLocal();
-  bind(); initVolume(); syncUI(); replan();
+  bind(); initVolume(); syncUI(); syncLoopBtn(); replan();
   restoreFonts();
   // first visit on a phone: スマホ mode
   let mode = window.matchMedia && window.matchMedia('(max-width: 760px)').matches ? 'mobile' : 'easy';

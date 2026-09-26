@@ -175,6 +175,21 @@ BODY = {
     '追加': 'Baru', '和': 'JP', '演出': 'Efek', '手法': 'Teknik',
     'コマ打ち': 'Interval frame', 'フラッシュ': 'Flash', 'シード': 'Seed', '新しいシード': 'Seed baru',
     '標準': 'Standar', '最高': 'Maksimum', '高': 'Tinggi', '中止': 'Batal',
+    '行ループ': 'Loop baris', 'カットループ': 'Loop cut',
+    '全体を繰り返し': 'Ulangi seluruh lagu', 'この行を繰り返し': 'Ulangi baris ini',
+    'このカットを繰り返し': 'Ulangi cut ini', '繰り返しなし': 'Tanpa loop',
+
+
+
+
+
+
+
+    'このカットだけ差し替え': 'Ganti cut ini saja',
+    'このカットだけ構成を再抽選': 'Undi ulang susunan cut ini saja',
+    'このカットだけ手法をランダムに': 'Acak teknik cut ini saja',
+    'このカットをシャッフル': 'Acak cut ini',
+    'このカットをおまかせ': 'Buat variasi cut ini',
 }
 
 UI = {
@@ -291,6 +306,31 @@ UI = {
     '解析中…': 'Menganalisis audio…', '読み込めませんでした: ': 'Tidak dapat memuat: ',
     '約': 'sekitar ', '（PC）': ' (terpasang)',
     '字面': 'JIZURA', '追加': 'Baru', '和': 'JP',
+    'ループ': 'Loop',
+    '行ループ': 'Loop baris', 'カットループ': 'Loop cut',
+    '全体を繰り返し': 'Ulangi seluruh lagu', 'この行を繰り返し': 'Ulangi baris ini',
+    'このカットを繰り返し': 'Ulangi cut ini', '繰り返しなし': 'Tanpa loop',
+    # ロック（スライダー／手法の組／部品セット）
+    "'おまかせでON／OFFを変えないようにロック'": "'Kunci agar Acak tidak mengubah pilihan ON/OFF grup ini'",
+    "'おまかせ／シャッフルで変えないようにロック'": "'Kunci agar Acak / Kocok tidak mengubahnya'",
+    "'ロック中。クリックで解除'": "'Terkunci — klik untuk membuka'",
+    "'ロック：'": "'Terkunci: '",
+    "'ロック解除：'": "'Kunci dibuka: '",
+
+
+
+
+
+
+
+    'この位置のカットは抽選できません': 'Tidak ada cut di posisi ini untuk diundi ulang',
+    '`${i + 1}行目 カット${k + 1}のレイアウト`': '`Layout cut ${k + 1} di baris ${i + 1}`',
+    'このカットだけ構成を再抽選': 'Undi ulang susunan cut ini saja',
+    'このカットだけ手法をランダムに': 'Acak teknik cut ini saja',
+    'このカットをシャッフル': 'Acak cut ini',
+    'このカットをおまかせ': 'Buat variasi cut ini',
+    'おまかせ': 'Buat variasi',
+    'シャッフル': 'Acak susunan',
 }
 
 EXPORT = {

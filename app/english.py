@@ -82,6 +82,11 @@ BODY = {
     '拍にスナップ': 'Snap to beat', '手動タイミングを消す': 'Clear manual timing',
     '曲に合わせて、各行が始まる瞬間に': 'Press', 'かボタンを押してください。': 'or the button as each line starts.',
     '次:': 'Next:', '終了する': 'Finish', '行とカット': 'Lines and cuts',
+ 'このカットだけ差し替え': 'Replace on this cut only',
+ 'このカットだけ構成を再抽選': 'Reshuffle this cut only',
+ 'このカットだけ手法をランダムに': 'Randomize this cut only',
+ 'このカットをシャッフル': 'Shuffled this cut',
+ 'このカットをおまかせ': 'Randomized this cut',
     '再生位置': 'Playback position', 'タイムライン（クリックで移動）': 'Timeline (click to seek)',
     '前の案に戻る': 'Previous variation', '次の案へ進む': 'Next variation',
     '設定はそのままで構成だけ再抽選（ロックした行は維持）': 'Shuffle the arrangement, keeping locked lines',
@@ -135,6 +140,24 @@ BODY = {
     '追加': 'New', '和': 'JP', '演出': 'Effects', '手法': 'Techniques',
     'コマ打ち': 'Frame stepping', 'フラッシュ': 'Flash', 'シード': 'Seed', '新しいシード': 'New seed',
     '標準': 'Standard', '最高': 'Maximum', '高': 'High', '中止': 'Cancel',
+    '行ループ': 'Line loop', 'カットループ': 'Cut loop',
+    '全体を繰り返し': 'Loop the whole piece', 'この行を繰り返し': 'Loop this line',
+    'このカットを繰り返し': 'Loop this cut', '繰り返しなし': 'No loop',
+
+
+
+
+
+
+
+    'このカットだけ差し替え': 'Replace only this cut',
+    'このカットだけ構成を再抽選': 'Re-roll the composition of only this cut',
+    'このカットだけ手法をランダムに': 'Randomize the technique of only this cut',
+    'このカットをシャッフル': 'Shuffle this cut',
+    'このカットをおまかせ': 'Randomise this cut',
+    'このカットをおまかせ': 'Randomize this cut',
+
+
 }
 
 UI = {
@@ -251,6 +274,31 @@ UI = {
     '解析中…': 'Analyzing audio…', '読み込めませんでした: ': 'Could not load: ',
     '約': 'about ', '（PC）': ' (installed)',
     '字面': 'JIZURA', '追加': 'New', '和': 'JP',
+    'ループ': 'Loop',
+    '行ループ': 'Line loop', 'カットループ': 'Cut loop',
+    '全体を繰り返し': 'Loop the whole piece', 'この行を繰り返し': 'Loop this line',
+    'このカットを繰り返し': 'Loop this cut', '繰り返しなし': 'No loop',
+    # ロック（スライダー／手法の組／部品セット）
+    "'おまかせでON／OFFを変えないようにロック'": "'Lock so Randomize keeps this group’s ON/OFF selection'",
+    "'おまかせ／シャッフルで変えないようにロック'": "'Lock so Randomize / Shuffle leave this alone'",
+    "'ロック中。クリックで解除'": "'Locked — click to unlock'",
+    "'ロック：'": "'Locked: '",
+    "'ロック解除：'": "'Unlocked: '",
+
+
+
+
+
+
+
+    'この位置のカットは抽選できません': 'No cut at this position to re-roll',
+    '`${i + 1}行目 カット${k + 1}のレイアウト`': '`Layout of cut ${k + 1} on line ${i + 1}`',
+    'このカットだけ構成を再抽選': 'Re-roll the composition of only this cut',
+    'このカットだけ手法をランダムに': 'Randomize the technique of only this cut',
+    'このカットをシャッフル': 'Shuffle this cut',
+    'このカットをおまかせ': 'Randomize this cut',
+    'おまかせ': 'Randomize',
+    'シャッフル': 'Shuffle',
 }
 
 EXPORT = {
@@ -272,6 +320,11 @@ EXPORT = {
 }
 
 AE_UI = {
+    "'文字PV系の部品を使う'": "'Use typographic parts'", "'キネティックの部品を使う'": "'Use kinetic parts'", "'ホラーの演出も使う'": "'Include horror effects'",
+    "'線・数字・字組みだけで見せる、文字PVらしい部品（約50）'": "'About 50 parts that work with lines, numbers and type alone'",
+    "'語ごとに動く・跳ねる・積み上がる、動き重視の部品（約50）'": "'About 50 motion-first parts: words move, bounce and stack one by one'",
+    "'不気味な雰囲気の部品（約50）と配色セット3。オンにすると、おまかせの雰囲気に「ホラー」が加わります（ホラーの部品は雰囲気が「ホラー」のときだけ使います）'": "'About 50 eerie parts and 3 styles. When on, Randomize adds a Horror mood (horror parts are used only in that mood)'",
+    "'  〔ホ〕'": "'  [H]'",
     "'\u3000縦長のとき'": "'  On tall frames'",
     "'上下に分ける'": "'Top / bottom'",
     "'左右に分ける'": "'Left / right'",
@@ -333,7 +386,7 @@ AE_UI = {
     ' 箇所あり、近い表現に置き換えました。': ' unsupported techniques; similar ones were substituted.',
     ' 箇所を、近い表現で作りました': ' instances were replaced by similar techniques',
     'ブラウザ版より古いパネルを使っている可能性があります。最新の JIZURA_AE.jsx（v': 'This panel may be older than the browser edition. Install the latest JIZURA_AE_en.jsx (v',
-    '・707 部品）に差し替えて、After Effects を再起動してください。': ', 707 techniques) and restart After Effects.',
+    '・860 部品）に差し替えて、After Effects を再起動してください。': ', 860 techniques) and restart After Effects.',
     '先にコンポを作ってください（このパネルで最後に作ったコンポを調べます）': 'Create a composition first; diagnostics inspect the last one created here.',
     '最後に作ったコンポが見つかりません（削除された可能性があります）': 'The last composition could not be found (it may have been deleted).',
     '診断中…（数十秒かかることがあります）': 'Diagnosing… (this can take a few seconds)',
